@@ -74,9 +74,186 @@ Sensitive forwarded subjects included:
 
 ---
 
-## 🧪 KQL Walkthrough (Queries + Why They Matter)
+Identify role
+Employees
+| where name contains "Afomiya"
+| distinct role
 
-### A) Establish victim identity, role, and MFA posture
-```kql
+
+Purpose:
+Determine target value and exposure. Influencer Partner roles attract phishing due to frequent external communication.
+
+Check MFA status
+Employees
+| where name contains "Afomiya"
+| distinct mfa_enabled
+
+
+Purpose:
+Assess account protection level. MFA was disabled, increasing compromise risk.
+
+2️⃣ Phishing Email Discovery
+Locate Dior-themed phishing email
+Email
+| where recipient == "afomiya_storm@clouthaus.com"
+| where subject contains "Dior" or links contains "Dior"
+
+
+Purpose:
+Identify spear-phishing messages impersonating a luxury brand.
+
+3️⃣ Confirm Phishing Link Click
+Validate outbound connection to phishing domain
+OutboundNetworkEvents
+| where url contains "super-brand-offer.com"
+
+
+Purpose:
+Confirm the user interacted with the malicious infrastructure.
+
+4️⃣ Infrastructure Pivoting (Domain → IP → Reuse)
+Resolve phishing domain
+PassiveDns
+| where domain contains "super-brand-offer.com"
+
+
+Purpose:
+Identify the hosting IP behind the phishing site.
+
+Identify infrastructure reuse
+PassiveDns
+| where ip contains "198.51.100.12"
+| distinct domain
+
+
+Purpose:
+Detect reuse of hosting infrastructure across multiple malicious domains.
+
+5️⃣ Inbound Reconnaissance Analysis
+Pull inbound activity from attacker IP
+InboundNetworkEvents
+| where timestamp between (datetime(2025-03-01T11:58:00Z) .. datetime(2025-04-03T12:20:00Z))
+| where src_ip contains "182.45.67.89"
+
+
+Purpose:
+Identify pre-attack reconnaissance behavior.
+
+Extract URL paths to interpret intent
+InboundNetworkEvents
+| where src_ip contains "182.45.67.89"
+| where method in ("GET", "POST")
+| project parse_path(url)
+
+
+Purpose:
+Reveal attacker intent by analyzing URL patterns rather than raw traffic.
+
+Finding:
+Recon focused on the victim’s location, consistent with OSINT-driven targeting.
+
+6️⃣ Attacker Attribution via PassiveDNS
+Identify domains linked to attacker IP
+PassiveDns
+| where ip contains "182.45.67.89"
+| distinct domain
+
+
+Purpose:
+Correlate malicious login activity with phishing infrastructure.
+
+7️⃣ Email Exfiltration Detection (Critical Phase)
+Validate Email table schema
+Email
+| take 5
+
+
+Purpose:
+Confirm available fields (reply_to, links, attachments) before hunting exfiltration.
+
+Quantify external email flow
+Email
+| extend RecipDomain = tostring(split(recipient, "@")[1])
+| summarize Total=count(), External=countif(RecipDomain != "clouthaus.com")
+
+
+Purpose:
+Establish baseline and confirm external email volume suitable for exfiltration analysis.
+
+Identify forwarded emails (exfiltration pivot)
+let victim = "afomiya_storm@clouthaus.com";
+Email
+| where reply_to == victim
+| where recipient !endswith "@clouthaus.com"
+| project timestamp, subject, sender, recipient, links, attachments
+| order by timestamp asc
+
+
+Purpose:
+Forwarded messages preserve mailbox ownership via reply_to, not sender.
+This pivot reveals auto-forwarded exfiltration.
+
+Detect identity document exfiltration (passport)
+let victim = "afomiya_storm@clouthaus.com";
+Email
+| where reply_to == victim
+| where recipient !endswith "@clouthaus.com"
+| where subject has_any ("passport","ID","KYC","verification","travel")
+| project timestamp, subject, recipient, links, attachments
+| order by timestamp asc
+
+
+Purpose:
+Identify identity-theft-grade data exfiltration.
+Documents were shared via cloud links, not attachments.
+
+Detect financial & tax document exfiltration
+let victim = "afomiya_storm@clouthaus.com";
+Email
+| where reply_to == victim
+| where recipient !endswith "@clouthaus.com"
+| where subject has_any ("Bank","Statement","Monthly","W-2","1099","Tax","Year-End","Payroll")
+| project timestamp, subject, sender, recipient, links, attachments
+| order by timestamp asc
+
+
+Purpose:
+Confirm theft of financial documents enabling fraud and tax abuse.
+
+🧠 Key Analyst Takeaways
+
+Forwarded email exfiltration does not require attachments
+
+Ownership is preserved via reply_to, not sender
+
+Cloud links (Drive/Docs) are commonly used to evade DLP
+
+Reconnaissance often precedes visible compromise
+
+Infrastructure reuse enables attacker clustering and attribution
+
+🛡️ Defensive Recommendations
+
+Enforce MFA for high-visibility roles
+
+Alert on foreign logins with anomalous User-Agents
+
+Monitor spikes in external recipients after authentication events
+
+Inspect cloud links in forwarded emails with sensitive keywords
+
+Track domain → IP → domain pivots using PassiveDNS
+
+🧭 MITRE ATT&CK Mapping
+
+Reconnaissance: OSINT / Victim Identity & Location (T1589 / T1593)
+
+Initial Access: Spearphishing Link (T1566.002)
+
+Credential Access: Phishing Credential Harvesting
+
+Collection: Email Collection / Forwarding Abuse (T1114.003)
+
+Exfiltration: Attachmentless Exfiltration via Cloud Links
 Employees
 | where name contains "Afomiya"
