@@ -78,18 +78,20 @@ Sensitive forwarded subjects included:
 
 > **Important:** Some exfil events had **no file attachments** because data was shared via **external links (Drive/Docs)**. This is realistic BEC/identity-theft tradecraft to evade attachment-based detection.
 
----
 
-## 🔎 Investigation Walkthrough (KQL)
+## 🔍 KQL Investigation Walkthrough (Threat Hunt)
 
-### 1) Identify role
+This section documents the KQL queries used during the CloutHaus investigation, organized by investigative phase.  
+Each query includes its **purpose**, **context**, and **what it revealed** during the hunt.
 
-```kusto
+## 1️⃣ Identity & Risk Posture
+
+### Identify the victim’s role
+```kql
 Employees
 | where name contains "Afomiya"
 | distinct role
-```
-
+'''
 **Purpose:** Determine target value and exposure. Influencer Partner roles attract phishing due to frequent external communication.
 
 ### 2) Check MFA status
